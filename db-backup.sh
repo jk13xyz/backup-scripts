@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BACKUPDIR=/home/jens/backup/databases
+BACKUPDIR=$HOME/backup/databases
 DAYS=7
 TIMESTAMP=$(date +"%Y%m%d%H%M")
 

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BACKUPDIR=/home/jens/backup/postgres
+BACKUPDIR=$HOME/backup/postgres
 DAYS=7
 TIMESTAMP=$(date +"%Y%m%d%H%M")
 
@@ -18,8 +18,7 @@ for i in $CONTAINER; do
         DATABASES=$(docker exec -e PGPASSWORD=$POSTGRES_PASSWORD $i psql -U postgres -lqt | cut -d \| -f 1 | grep -vE 'template[01]|postgres')
         for PG_DATABASE in $DATABASES; do
             echo -e "Creating PostgreSQL backup for database on container:\n  * $PG_DATABASE DB on $i";
-            docker exec -e PGPASSWORD=$POSTGRES_PASSWORD \
-                $i /usr/bin/pg_dump -U postgres $PG_DATABASE | gzip > $BACKUPDIR/$i-$PG_DATABASE-$TIMESTAMP.sql.gz
+            docker exec -e PGPASSWORD=$POSTGRES_PASSWORD $i /usr/bin/pg_dump -U postgres $PG_DATABASE | gzip > $BACKUPDIR/$i-$PG_DATABASE-$TIMESTAMP.sql.gz
         done
     else
         echo "ERROR: Cannot find dump command for container $i!"
