@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BACKUPDIR=/home/jens/backup/databases
+BACKUPDIR=$HOME/backup/databases
 DAYS=7
 TIMESTAMP=$(date +"%Y%m%d%H%M")
 
@@ -87,6 +87,9 @@ for i in $CONTAINER; do
         DUMP_COMMAND="$PGSQL_LOCATION -U $DATABASE_USER"
     elif [ -n "$PG_DUMP_LOCATION" ]; then
         DATABASE_TYPE="PostgreSQL"
+        if [ $DATABASE_USER == "root" ]; then
+            $DATABASE_USER = "postgres"
+        elif
         DUMP_COMMAND="$PG_DUMP_LOCATION -U $DATABASE_USER"
     else
         DATABASE_TYPE="Unknown"
