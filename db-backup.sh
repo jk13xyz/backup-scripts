@@ -1,26 +1,19 @@
 #!/bin/bash
 
-BACKUPDIR=$HOME/backup/databases
+BACKUPDIR=/home/jens/backup/databases
 DAYS=7
 TIMESTAMP=$(date +"%Y%m%d%H%M")
 
 CONTAINER=$(docker ps --format '{{.Names}}:{{.Image}}' | grep 'mysql\|mariadb\|postgres' | cut -d":" -f1)
 
+command_exists() {
+  docker exec "$1" sh -c "type $2" >/dev/null 2>&1
+}
+
 echo -e "Start $TIMESTAMP Backup for Databases: \n"
 if [ ! -d $BACKUPDIR ]; then
     mkdir -p $BACKUPDIR
 fi
-
-get_database_password_required() {
-    case "$1" in
-        MYSQL_ROOT_PASSWORD|MYSQL_PASSWORD|MARIADB_ROOT_PASSWORD|MARIADB_PASSWORD|POSTGRES_PASSWORD)
-            echo "yes"
-            ;;
-        *)
-            echo "no"
-            ;;
-    esac
-}
 
 for i in $CONTAINER; do
 
@@ -67,17 +60,31 @@ for i in $CONTAINER; do
             ;;
     esac
 
-    MYSQLDUMP_LOCATION=$(docker exec $i which mysqldump)
-    MARIADB_DUMP_LOCATION=$(docker exec $i which mariadb-dump)
-    PSQL_LOCATION=$(docker exec $i which psql)
-    PG_DUMP_LOCATION=$(docker exec $i which pg_dump)
+    MYSQLDUMP_LOCATION=""
+    MARIADB_DUMP_LOCATION=""
+    PG_DUMP_LOCATION=""
+
+    if command_exists "$i" mysqldump; then
+        MYSQLDUMP_LOCATION="mysqldump"
+    fi
+
+    if command_exists "$i" mariadb-dump; then
+        MARIADB_DUMP_LOCATION="mariadb-dump"
+    fi
+
+    if command_exists "$i" pg_dump; then
+        PG_DUMP_LOCATION="pg_dump"
+    fi
 
     if [ -n "$MYSQLDUMP_LOCATION" ]; then
         DATABASE_TYPE="MySQL"
-        DUMP_COMMAND="$MYSQLDUMP_LOCATION -u $DATABASE_USER --p$DATABASE_PASSWORD"
+        DUMP_COMMAND="$MYSQLDUMP_LOCATION -u $DATABASE_USER -p$DATABASE_PASSWORD"
     elif [ -n "$MARIADB_DUMP_LOCATION" ]; then
         DATABASE_TYPE="MariaDB"
         DUMP_COMMAND="$MARIADB_DUMP_LOCATION -u $DATABASE_USER -p$DATABASE_PASSWORD"
+    elif [ -n "$PGSQL_LOCATION" ]; then
+        DATABASE_TYPE="PostgreSQL"
+        DUMP_COMMAND="$PGSQL_LOCATION -U $DATABASE_USER"
     elif [ -n "$PG_DUMP_LOCATION" ]; then
         DATABASE_TYPE="PostgreSQL"
         DUMP_COMMAND="$PG_DUMP_LOCATION -U $DATABASE_USER"
@@ -86,12 +93,16 @@ for i in $CONTAINER; do
         DUMP_COMMAND=""
     fi
 
+    if [ "$DATABASE_TYPE" == "Unknown" ]; then
+        echo "ERROR: cannot find dump command for container $i!"
+    fi
+
     if [ -n "$DUMP_COMMAND" ]; then
         if [ "$DATABASE_TYPE" = "MySQL" ]; then
-            DATABASES=$(docker exec $i $DUMP_COMMAND -e "show databases" | grep -Ev "(Database|information_schema|performance_schema|mysql)")
+            DATABASES=$(docker exec -e MYSQL_PWD=$DATABASE_PASSWORD $i mysql -u $DATABASE_USER -s -e "show databases" | grep -Ev "(Database|information_schema|performance_schema|mysql)")
             for d in $DATABASES; do
                 echo -e "Creating $DATABASE_TYPE Backup for Container:\n $d DB on $i";
-                docker exec $i $DUMP_COMMAND $d | gzip > $BACKUPDIR/$i-$d-$TIMESTAMP.sql.gz
+                docker exec -it $i $DUMP_COMMAND $d | gzip > $BACKUPDIR/$i-$d-$TIMESTAMP.sql.gz
             done
         elif [ "$DATABASE_TYPE" = "MariaDB" ]; then
             DATABASES=$(docker exec -e MYSQL_PWD=$DATABASE_PASSWORD $i mariadb -u $DATABASE_USER -s -e "show databases" | grep -Ev "(Database|information_schema|performance_schema|mysql)")
